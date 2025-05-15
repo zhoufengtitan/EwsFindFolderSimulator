@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <FindFolderResponse xmlns="http://schemas.microsoft.com/exchange/services/2006/messages">
+      <ResponseMessages>
+        <FindFolderResponseMessage ResponseClass="Success">
+          <ResponseCode>NoError</ResponseCode>
+          <RootFolder TotalItemsInView="2" IncludesLastItemInRange="true">
+            <Folders xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+              <t:Folder>
+                <t:FolderId Id="folder1-id" ChangeKey="ck1"/>
+                <t:DisplayName>Inbox</t:DisplayName>
+                <t:TotalCount>217</t:TotalCount>
+                <t:ChildFolderCount>0</t:ChildFolderCount>
+              </t:Folder>
+              <t:Folder>
+                <t:FolderId Id="folder2-id" ChangeKey="ck2"/>
+                <t:DisplayName>Sent Items</t:DisplayName>
+                <t:TotalCount>28</t:TotalCount>
+                <t:ChildFolderCount>0</t:ChildFolderCount>
+              </t:Folder>
+            </Folders>
+          </RootFolder>
+        </FindFolderResponseMessage>
+      </ResponseMessages>
+    </FindFolderResponse>
+  </soap:Body>
+</soap:Envelope>
