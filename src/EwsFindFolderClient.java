@@ -5,8 +5,10 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.*;
+import java.util.logging.*;
 
 public class EwsFindFolderClient {
+    private static final Logger logger = Logger.getLogger(EwsFindFolderClient.class.getName());
 
     private static final String DEFAULT_ENDPOINT = "http://localhost:8080/ews/FindFolder";
     private static final String SIMULATED_RESPONSE_FILE = "simulated-response.xml";
@@ -20,7 +22,7 @@ public class EwsFindFolderClient {
     }
 
     // Run the FindFolder operation
-    public void runFindFolder(String parentFolderId, String folderShape) {
+    public void runFindFolder(String parentFolderId, String folderShape) throws Exception {
         try {
 
             SOAPMessage soapResponse;
@@ -28,14 +30,15 @@ public class EwsFindFolderClient {
                 soapResponse = getSimulatedResponse();
             } else {
                 SOAPMessage soapRequest = buildSoapEnvelope(parentFolderId, folderShape);
+                logger.info("SOAP Request message :" + soapRequest);
                 soapResponse = sendSoapRequest(soapRequest);
             }
 
             parseAndPrintResponse(soapResponse);
 
         } catch (Exception e) {
-            System.err.println("Error during FindFolder operation: " + e.getMessage());
-            e.printStackTrace();
+            logger.log(Level.SEVERE, "Error occurred during runFindFolder: ", e);
+            throw e;
         }
     }
 
@@ -74,16 +77,20 @@ public class EwsFindFolderClient {
     private SOAPMessage sendSoapRequest(SOAPMessage soapRequest) throws IOException {
         URL url = new URL(this.endpoint);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+        // Set request properties
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
 
         conn.setRequestProperty("Content-Type", "text/xml; charset=utf-8");
         conn.setRequestProperty("SOAPAction", "\"http://schemas.microsoft.com/exchange/services/2006/messages/FindFolder\"");
 
+        // Write the SOAP request body
         try (OutputStream os = conn.getOutputStream()) {
             soapRequest.writeTo(os);
         }
 
+        // Get the response code
         int responseCode = conn.getResponseCode();
         if (responseCode != HttpURLConnection.HTTP_OK) {
             throw new RuntimeException("HTTP error code: " + responseCode);
@@ -105,15 +112,15 @@ public class EwsFindFolderClient {
         return messageFactory.createMessage(null, is);
     }
 
-    // Parse SOAP response and print FolderId, DisplayName, ParentId
+    // Parse SOAP response and log FolderId, DisplayName, TotalCount
     private static void parseAndPrintResponse(SOAPMessage soapResponse) throws Exception {
         SOAPBody soapBody = soapResponse.getSOAPBody();
         
         // Check for errors
         if (soapBody.getFault() != null) {
-            System.err.println("SOAP Fault encountered:");
-            System.err.println("Fault Code: " + soapBody.getFault().getFaultCode());
-            System.err.println("Fault String: " + soapBody.getFault().getFaultString());
+            logger.severe("SOAP Fault encountered:");
+            logger.severe("Fault Code: " + soapBody.getFault().getFaultCode());
+            logger.severe("Fault String: " + soapBody.getFault().getFaultString());
             return;
         }
 
@@ -122,7 +129,7 @@ public class EwsFindFolderClient {
             "http://schemas.microsoft.com/exchange/services/2006/messages", "FindFolderResponse");
         
         if (responseList.getLength() == 0) {
-            System.out.println("No FindFolderResponse found in SOAP body");
+            logger.info("No FindFolderResponse found in SOAP body.");
             return;
         }
 
@@ -132,14 +139,14 @@ public class EwsFindFolderClient {
         // Get ResponseCode
         SOAPElement responseCodeElement = (SOAPElement) responseMessage.getElementsByTagNameNS(
             "http://schemas.microsoft.com/exchange/services/2006/messages", "ResponseCode").item(0);
-        System.out.println("Response Code: " + responseCodeElement.getValue());
+        logger.info("Response Code: " + responseCodeElement.getValue());
 
         // Get folders
         javax.xml.soap.NodeList folders = soapBody.getElementsByTagNameNS(
             "http://schemas.microsoft.com/exchange/services/2006/types", "Folder");
 
         if (folders.getLength() == 0) {
-            System.out.println("No folders found in response");
+            logger.info("No folders found in response.");
             return;
         }
 
@@ -150,9 +157,12 @@ public class EwsFindFolderClient {
             String displayName = getElementValue(folder, "DisplayName");
             String totalCount = getElementValue(folder, "TotalCount");
 
-            System.out.println("FolderId: " + id);
-            System.out.println("DisplayName: " + displayName);
-            System.out.println("TotalCount: " + totalCount);
+            logger.info(String.format("Folder %d:\n  FolderId: %s\n  DisplayName: %s\n  ParentId: %s",
+                    i + 1,
+                    folderId != null ? folderId : "(missing)",
+                    displayName != null ? displayName : "(missing)",
+                    totalCount != null ? totalCount : "(missing)"
+            ));
         }
     }
 
@@ -175,12 +185,43 @@ public class EwsFindFolderClient {
     }
 
     public static void main(String[] args) {
+        configureLogger();
+
         boolean simulationMode = true;
         EWSFindFolderClient client = new EWSFindFolderClient(null, simulationMode);
                 
         String parentFolderId = "root"; // Root of the mailbox
         String folderShape = "AllProperties";
 
-        client.runFindFolder(parentFolderId, folderShape);
+        try {
+            client.runFindFolder(parentFolderId, folderShape);
+        } catch (IllegalArgumentException e) {
+            logger.warning("Invalid input Error: " + e.getMessage());
+        } catch (FileNotFoundException e) {
+            logger.log(Level.SEVERE, "Simulation file not found: ", e);
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, "IO Error while reading the simulation file: ", e);
+        } catch (SOAPException e) {
+            logger.log(Level.SEVERE, "Error while building the SOAP envelope for FindFolder command: ", e);
+        }} catch (Exception e) {
+            logger.log(Level.SEVERE, "Error occurred during FindFolder operation: ", e);
+        }
+    }
+
+    //  Configure Logging
+    private static void configureLogging() {
+        Logger rootLogger = Logger.getLogger("");
+        Handler consoleHandler = new ConsoleHandler();
+        consoleHandler.setLevel(Level.ALL);
+        rootLogger.addHandler(consoleHandler);
+        rootLogger.setLevel(Level.INFO);
+    }
+
+    //  Validate inputs
+    private static void validateInputs(String parentFolderId, String folderShape) {
+        if (parentFolderId == null || parentFolderId.isEmpty())
+            throw new IllegalArgumentException("Parent folder id cannot be null or empty.");
+        if (folderShape == null || folderShape.isEmpty())
+            throw new IllegalArgumentException("Folder shape cannot be null or empty.");
     }
 }
